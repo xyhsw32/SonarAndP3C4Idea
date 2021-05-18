@@ -26,6 +26,7 @@ plugins {
 
 buildscript {
     repositories {
+        mavenLocal()
         mavenCentral()
     }
     dependencies {
@@ -134,6 +135,11 @@ dependencies {
     "sqplugins"("org.sonarsource.slang:sonar-ruby-plugin:1.8.2.1946@jar")
     "sqplugins"("org.sonarsource.html:sonar-html-plugin:3.3.0.2534@jar")
     "typescript"("typescript:typescript:$typescriptVersion@tgz")
+    compile("org.codehaus.sonar:sonar-ws-client:5.1")
+    compile("org.freemarker:freemarker:2.3.25-incubating")
+    compile("com.alibaba.p3c.idea:p3c-common:2.0.2")
+    compile("org.javassist:javassist:3.21.0-GA")
+    compile("com.alibaba.p3c:p3c-pmd:2.1.0")
 }
 
 tasks.prepareSandbox {

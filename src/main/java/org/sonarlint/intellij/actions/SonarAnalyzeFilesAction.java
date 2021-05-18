@@ -42,6 +42,7 @@ import org.sonarlint.intellij.analysis.SonarLintStatus;
 import org.sonarlint.intellij.trigger.SonarLintSubmitter;
 import org.sonarlint.intellij.trigger.TriggerType;
 import org.sonarlint.intellij.ui.SonarLintToolWindowFactory;
+import org.sonarlint.intellij.util.P3cUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
 public class SonarAnalyzeFilesAction extends DumbAwareAction {
@@ -122,6 +123,7 @@ public class SonarAnalyzeFilesAction extends DumbAwareAction {
     }
 
     submitter.submitFiles(fileSet, TriggerType.ACTION, callback, executeBackground(e));
+    P3cUtils.executeInspection(project,fileSet);
   }
 
   private static String whatAnalyzed(int numFiles) {

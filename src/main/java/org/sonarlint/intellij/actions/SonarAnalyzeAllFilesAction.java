@@ -40,6 +40,7 @@ import org.sonarlint.intellij.analysis.AnalysisCallback;
 import org.sonarlint.intellij.analysis.SonarLintStatus;
 import org.sonarlint.intellij.trigger.SonarLintSubmitter;
 import org.sonarlint.intellij.trigger.TriggerType;
+import org.sonarlint.intellij.util.P3cUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
 public class SonarAnalyzeAllFilesAction extends AbstractSonarAction {
@@ -73,6 +74,7 @@ public class SonarAnalyzeAllFilesAction extends AbstractSonarAction {
     Collection<VirtualFile> allFiles = getAllFiles(project);
     AnalysisCallback callback = new ShowAnalysisResultsCallable(project, allFiles, "all project files");
     submitter.submitFiles(allFiles, TriggerType.ALL, callback, false);
+    P3cUtils.executeInspection(project,allFiles);
   }
 
   private static Collection<VirtualFile> getAllFiles(Project project) {

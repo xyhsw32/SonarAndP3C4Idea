@@ -118,8 +118,7 @@
          on how to target different products -->
     <depends>com.intellij.modules.lang</depends>
     <depends optional="true" config-file="plugin-java.xml">com.intellij.modules.java</depends>
-
-
+    <depends optional="true" config-file="plugin-p3c.xml">com.intellij.modules.java</depends>
     <extensions defaultExtensionNs="com.intellij">
         <codeInsight.linkHandler prefix="#sonarissue/" handlerClass="org.sonarlint.intellij.editor.SonarLinkHandler"/>
         <toolWindow id="SonarLint" anchor="bottom" icon="/images/ico-sonarlint-13.png" factoryClass="org.sonarlint.intellij.ui.SonarLintToolWindowFactory" canCloseContents="true"/>
@@ -190,6 +189,8 @@
         <postStartupActivity implementation="org.sonarlint.intellij.BootstrapStartupActivity"/>
         <postStartupActivity implementation="org.sonarlint.intellij.trigger.EditorOpenTrigger"/>
         <projectService serviceImplementation="org.sonarlint.intellij.trigger.SonarLintSubmitter"/>
+        <executor implementation="org.sonarlint.intellij.executor.RunExecutor"/>
+        <programRunner implementation="org.sonarlint.intellij.runner.RunCodeRunner"/>
     </extensions>
 
     <extensionPoints>

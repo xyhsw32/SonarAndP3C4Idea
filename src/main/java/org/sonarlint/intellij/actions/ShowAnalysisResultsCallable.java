@@ -61,7 +61,7 @@ public class ShowAnalysisResultsCallable implements AnalysisCallback {
     /**
      * 调起p3c扫描
      */
-    P3cUtils.executeInspection(project, failedVirtualFiles);
+    P3cUtils.executeInspection(project, affectedFiles);
   }
 
   private void showAnalysisResultsTab() {

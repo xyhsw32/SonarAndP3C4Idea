@@ -27,7 +27,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.StartupActivity;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
-import org.sonarlint.intellij.util.P3cUtils;
+import org.sonarlint.intellij.core.P3cUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
 import java.util.Arrays;

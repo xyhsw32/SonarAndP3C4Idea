@@ -23,16 +23,11 @@ import com.google.common.base.Preconditions;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
-import java.nio.file.Path;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.function.Predicate;
 import org.sonarlint.intellij.ui.SonarLintConsole;
 import org.sonarlint.intellij.util.ProjectLogOutput;
 import org.sonarlint.intellij.util.SonarLintAppUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
+import org.sonarsource.sonarlint.core.ConnectedSonarLintEngineImpl;
 import org.sonarsource.sonarlint.core.client.api.common.PluginDetails;
 import org.sonarsource.sonarlint.core.client.api.common.ProgressMonitor;
 import org.sonarsource.sonarlint.core.client.api.common.analysis.AnalysisResults;
@@ -42,6 +37,13 @@ import org.sonarsource.sonarlint.core.client.api.connected.ConnectedAnalysisConf
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedRuleDetails;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
 import org.sonarsource.sonarlint.core.client.api.connected.ProjectBinding;
+import org.sonarsource.sonarlint.core.container.storage.StorageReader;
+import org.sonarsource.sonarlint.core.proto.Sonarlint;
+
+import java.nio.file.Path;
+import java.util.*;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static org.sonarlint.intellij.config.Settings.getSettingsFor;
 
@@ -111,4 +113,23 @@ class ConnectedSonarLintFacade extends SonarLintFacade {
     return details.getHtmlDescription() + "<br/><br/>" + extendedDescription;
   }
 
+  public List<String> getActiveList(String projectKey){
+    ConnectedSonarLintEngineImpl connectedSonarLintEngine = (ConnectedSonarLintEngineImpl) this.engine;
+    StorageReader storageReader = connectedSonarLintEngine.getGlobalContainer().getComponentByType(StorageReader.class);
+    Map<String, String> qProfilesByLanguage = storageReader.readProjectConfig(projectKey).getQprofilePerLanguageMap();
+    List<String> activeRulesList = new ArrayList<>();
+    for (Map.Entry<String, String> entry : qProfilesByLanguage.entrySet()) {
+      String language = entry.getKey();
+      String qProfileKey = entry.getValue();
+      if (language.equals("java")){
+        Sonarlint.ActiveRules activeRulesFromStorage = storageReader.readActiveRules(qProfileKey);
+        for (Sonarlint.ActiveRules.ActiveRule activeRule : activeRulesFromStorage.getActiveRulesByKeyMap().values()) {
+          if (activeRule.getRepo().equals("pmd")){
+            activeRulesList.add(activeRule.getKey());
+          }
+        }
+      }
+    }
+    return activeRulesList;
+  }
 }

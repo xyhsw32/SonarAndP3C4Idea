@@ -27,7 +27,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.Nullable;
 import org.sonarlint.intellij.analysis.AnalysisCallback;
 import org.sonarlint.intellij.analysis.SonarLintStatus;
-import org.sonarlint.intellij.core.P3cUtils;
 import org.sonarlint.intellij.trigger.SonarLintSubmitter;
 import org.sonarlint.intellij.trigger.TriggerType;
 import org.sonarlint.intellij.util.SonarLintUtils;
@@ -70,6 +69,5 @@ public class SonarAnalyzeChangedFilesAction extends AbstractSonarAction {
     List<VirtualFile> affectedFiles = changeListManager.getAffectedFiles();
     AnalysisCallback callback = new ShowAnalysisResultsCallable(project, affectedFiles, "SCM changed files");
     submitter.submitFiles(affectedFiles, TriggerType.CHANGED_FILES, callback, false);
-    P3cUtils.executeInspection(project,affectedFiles);
   }
 }

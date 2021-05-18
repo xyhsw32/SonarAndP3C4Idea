@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.sonarlint.intellij.analysis.AnalysisCallback;
+import org.sonarlint.intellij.core.P3cUtils;
 import org.sonarlint.intellij.issue.IssueStore;
 import org.sonarlint.intellij.issue.IssueManager;
 import org.sonarlint.intellij.issue.LiveIssue;
@@ -57,6 +58,10 @@ public class ShowAnalysisResultsCallable implements AnalysisCallback {
     IssueStore issueStore = SonarLintUtils.getService(project, IssueStore.class);
     issueStore.set(map, whatAnalyzed);
     showAnalysisResultsTab();
+    /**
+     * 调起p3c扫描
+     */
+    P3cUtils.executeInspection(project, failedVirtualFiles);
   }
 
   private void showAnalysisResultsTab() {

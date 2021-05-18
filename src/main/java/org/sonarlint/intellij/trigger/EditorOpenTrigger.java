@@ -27,7 +27,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.StartupActivity;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
-import org.sonarlint.intellij.core.P3cUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
 import java.util.Arrays;
@@ -68,7 +67,6 @@ public class EditorOpenTrigger implements FileEditorManagerListener, StartupActi
           SonarLintSubmitter submitter = SonarLintUtils.getService(myProject, SonarLintSubmitter.class);
           List<VirtualFile> virtualFileList = Arrays.asList(openFiles);
           submitter.submitFiles(virtualFileList, TriggerType.EDITOR_OPEN, true);
-          P3cUtils.executeInspection(myProject,virtualFileList);
         }
       }
     }

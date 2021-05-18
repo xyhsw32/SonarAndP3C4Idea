@@ -33,7 +33,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.sonarlint.intellij.analysis.AnalysisCallback;
 import org.sonarlint.intellij.analysis.SonarLintStatus;
-import org.sonarlint.intellij.core.P3cUtils;
 import org.sonarlint.intellij.trigger.SonarLintSubmitter;
 import org.sonarlint.intellij.trigger.TriggerType;
 import org.sonarlint.intellij.ui.SonarLintToolWindowFactory;
@@ -124,7 +123,6 @@ public class SonarAnalyzeFilesAction extends DumbAwareAction {
     }
 
     submitter.submitFiles(fileSet, TriggerType.ACTION, callback, executeBackground(e));
-    P3cUtils.executeInspection(project,fileSet);
   }
 
   private static String whatAnalyzed(int numFiles) {

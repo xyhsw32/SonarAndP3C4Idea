@@ -15,6 +15,7 @@ import com.intellij.notification.Notifications;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import icons.SonarLintIcons;
+import org.sonarlint.intellij.actions.SonarConfigureProject;
 import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 import org.sonarlint.intellij.exception.InvalidBindingException;
 import org.sonarlint.intellij.util.SonarLintUtils;
@@ -36,7 +37,7 @@ public class P3cUtils {
         analysisScope.setIncludeTestSource(false);
         analysisScope.setSearchInLibraries(true);
         if (inspectionToolWrappers.isEmpty()){
-            Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","sonarqube server setting have no p3c rule","please confirm sonarqube setting", NotificationType.ERROR,null));
+            Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","Sonar server does not contain p3c rules","Please check the sonar server configuration", NotificationType.ERROR,null).addAction(new SonarConfigureProject("Sonarqube config")));
             return;
         }
         InspectionProfileImpl profile = InspectionProfileService.INSTANCE.createSimpleProfile(inspectionToolWrappers, inspectionManagerEx, null);
@@ -58,7 +59,7 @@ public class P3cUtils {
                     return ruleList.contains(ruleName);
                 }).collect(Collectors.toList());
             }else{
-                Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","sonarqube server not configure","please config sonarqube setting", NotificationType.ERROR,null));
+                Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","Sonar server is not configured","Please configure the sonar server", NotificationType.ERROR,null).addAction(new SonarConfigureProject("Sonarqube config")));
             }
         } catch (InvalidBindingException e) {
             e.printStackTrace();

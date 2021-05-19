@@ -5,7 +5,6 @@ import com.alibaba.p3c.idea.compatible.inspection.Inspections;
 import com.alibaba.p3c.idea.inspection.AliBaseInspection;
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.codeInspection.InspectionManager;
-import com.intellij.codeInspection.LocalInspectionTool;
 import com.intellij.codeInspection.ex.GlobalInspectionContextImpl;
 import com.intellij.codeInspection.ex.InspectionManagerEx;
 import com.intellij.codeInspection.ex.InspectionProfileImpl;
@@ -33,8 +32,7 @@ public class P3cUtils {
         InspectionManagerEx inspectionManagerEx = (InspectionManagerEx) InspectionManager.getInstance(project);
         GlobalInspectionContextImpl globalInspectionContext = new GlobalInspectionContextImpl(inspectionManagerEx.getProject(), inspectionManagerEx.getContentManager());
         List<InspectionToolWrapper<?, ?>> inspectionToolWrappers = Inspections.INSTANCE.aliInspections(project, inspectionToolWrapper -> inspectionToolWrapper.getTool() instanceof AliBaseInspection);
-        ProjectBindingManager projectBindingManager = SonarLintUtils.getService(project, ProjectBindingManager.class);
-        inspectionToolWrappers = filtSonarActiveRule(project, inspectionToolWrappers, projectBindingManager);
+        inspectionToolWrappers = filtSonarActiveRule(project, inspectionToolWrappers);
         analysisScope.setIncludeTestSource(false);
         analysisScope.setSearchInLibraries(true);
         if (inspectionToolWrappers.isEmpty()){
@@ -46,23 +44,18 @@ public class P3cUtils {
         globalInspectionContext.doInspections(analysisScope);
     }
 
-    private static List<InspectionToolWrapper<?, ?>> filtSonarActiveRule(Project project, List<InspectionToolWrapper<?, ?>> inspectionToolWrappers, ProjectBindingManager projectBindingManager) {
+    private static List<InspectionToolWrapper<?, ?>> filtSonarActiveRule(Project project, List<InspectionToolWrapper<?, ?>> inspectionToolWrappers) {
         try {
+            ProjectBindingManager projectBindingManager = SonarLintUtils.getService(project, ProjectBindingManager.class);
             SonarLintFacade sonarLintFacade = projectBindingManager.getFacade(true);
             if (sonarLintFacade instanceof ConnectedSonarLintFacade){
                 ConnectedSonarLintFacade connectedSonarLintFacade = (ConnectedSonarLintFacade) sonarLintFacade;
                 SonarLintProjectSettings sonarLintProjectSettings = getSettingsFor(project);
                 List<String> ruleList = connectedSonarLintFacade.getActiveList(sonarLintProjectSettings.getProjectKey());
                 inspectionToolWrappers = inspectionToolWrappers.stream().filter(inspectionToolWrapper -> {
-                    LocalInspectionTool localInspectionTool = (LocalInspectionTool) inspectionToolWrapper.getTool();
-                    String shortName = localInspectionTool.getShortName();
-                    if (shortName.startsWith("Alibaba")){
-                        shortName=shortName.substring(7);
-                    }
-                    if (shortName.startsWith("Ali")){
-                        shortName=shortName.substring(3);
-                    }
-                    return ruleList.contains(shortName);
+                    AliBaseInspection aliBaseInspection = (AliBaseInspection) inspectionToolWrapper.getTool();
+                    String ruleName = aliBaseInspection.ruleName();
+                    return ruleList.contains(ruleName);
                 }).collect(Collectors.toList());
             }else{
                 Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","sonarqube server not configure","please config sonarqube setting", NotificationType.ERROR,null));

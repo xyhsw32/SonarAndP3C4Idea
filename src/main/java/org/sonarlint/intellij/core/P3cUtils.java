@@ -1,5 +1,6 @@
 package org.sonarlint.intellij.core;
 
+import com.alibaba.p3c.idea.action.PmdGlobalInspectionContextImpl;
 import com.alibaba.p3c.idea.compatible.inspection.InspectionProfileService;
 import com.alibaba.p3c.idea.compatible.inspection.Inspections;
 import com.alibaba.p3c.idea.inspection.AliBaseInspection;
@@ -31,7 +32,7 @@ public class P3cUtils {
     public static void executeInspection(Project project, Collection<VirtualFile> virtualFiles){
         AnalysisScope analysisScope= new AnalysisScope(project, new ArrayList<>(virtualFiles));
         InspectionManagerEx inspectionManagerEx = (InspectionManagerEx) InspectionManager.getInstance(project);
-        GlobalInspectionContextImpl globalInspectionContext = new GlobalInspectionContextImpl(inspectionManagerEx.getProject(), inspectionManagerEx.getContentManager());
+        GlobalInspectionContextImpl globalInspectionContext = new PmdGlobalInspectionContextImpl(inspectionManagerEx.getProject(), inspectionManagerEx.getContentManager(),false);
         List<InspectionToolWrapper<?, ?>> inspectionToolWrappers = Inspections.INSTANCE.aliInspections(project, inspectionToolWrapper -> inspectionToolWrapper.getTool() instanceof AliBaseInspection);
         inspectionToolWrappers = filtSonarActiveRule(project, inspectionToolWrappers);
         analysisScope.setIncludeTestSource(false);

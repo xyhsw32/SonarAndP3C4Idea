@@ -51,7 +51,7 @@ java {
 }
 
 intellij {
-    version = "IC-2020.1.3"
+    version = "2020.1"
     pluginName = "sonarlint-intellij"
     updateSinceUntilBuild = false
     setPlugins("java")

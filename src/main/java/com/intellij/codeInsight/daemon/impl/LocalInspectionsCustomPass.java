@@ -33,6 +33,7 @@ import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
@@ -51,6 +52,7 @@ import gnu.trove.THashSet;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.sonarlint.intellij.messages.P3cAnalysisResultListener;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -126,12 +128,13 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
     private static final Set<String> ourToolsWithInformationProblems = new HashSet<>();
     public void doInspectInBatch(@NotNull final GlobalInspectionContextImpl context,
                                  @NotNull final InspectionManager iManager,
-                                 @NotNull final List<? extends LocalInspectionToolWrapper> toolWrappers) {
+                                 @NotNull final List<? extends LocalInspectionToolWrapper> toolWrappers, Project project) {
         final ProgressIndicator progress = ProgressManager.getInstance().getProgressIndicator();
         inspect(new ArrayList<>(toolWrappers), iManager, false, progress);
         addDescriptorsFromInjectedResults(context);
         List<InspectionResult> resultList = result.get(getFile());
         if (resultList == null) return;
+        project.getMessageBus().syncPublisher(P3cAnalysisResultListener.P3C_ANALYSIS_TOPIC).fileResult(project,resultList);
         //TODO result返回
         for (InspectionResult inspectionResult : resultList) {
             LocalInspectionToolWrapper toolWrapper = inspectionResult.tool;
@@ -787,7 +790,7 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
         return myInfos;
     }
 
-    private static class InspectionResult {
+    public class InspectionResult {
         @NotNull
         private final LocalInspectionToolWrapper tool;
         @NotNull

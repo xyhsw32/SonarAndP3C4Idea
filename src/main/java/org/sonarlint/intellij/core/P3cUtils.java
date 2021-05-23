@@ -37,6 +37,7 @@ import org.jetbrains.annotations.NotNull;
 import org.sonarlint.intellij.actions.SonarConfigureProject;
 import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 import org.sonarlint.intellij.exception.InvalidBindingException;
+import org.sonarlint.intellij.messages.P3cAnalysisResultListener;
 import org.sonarlint.intellij.util.SonarLintUtils;
 import org.sonarsource.sonarlint.core.client.api.exceptions.CanceledException;
 
@@ -117,15 +118,17 @@ public class P3cUtils {
                 LocalInspectionsCustomPass pass = new LocalInspectionsCustomPass(psiFile, document, textRange.getStartOffset(),
                         textRange.getEndOffset(), LocalInspectionsCustomPass.EMPTY_PRIORITY_RANGE, true,
                         HighlightInfoProcessor.getEmpty(), INSPECT_INJECTED_PSI);
-                pass.doInspectInBatch(globalInspectionContext,inspectionManagerEx, getWrappersFromTools(toolsList, psiFile, true, wrapper -> !(wrapper.getTool() instanceof ExternalAnnotatorBatchInspection)));
+                pass.doInspectInBatch(globalInspectionContext,inspectionManagerEx, getWrappersFromTools(toolsList, psiFile, true, wrapper -> !(wrapper.getTool() instanceof ExternalAnnotatorBatchInspection)),project);
             };
             indicator.setText("P3c Scan Current file name: " + virtualFile.getName());
             ApplicationManager.getApplication().runReadAction(runnable);
             if (indicator.isCanceled() || project.isDisposed() || Thread.currentThread().isInterrupted()) {
               //TODO 通知终止完成
+                project.getMessageBus().syncPublisher(P3cAnalysisResultListener.P3C_ANALYSIS_TOPIC).canceled(project);
                 throw new CanceledException();
             }
         }
+        project.getMessageBus().syncPublisher(P3cAnalysisResultListener.P3C_ANALYSIS_TOPIC).completed(project);
     }
 
 

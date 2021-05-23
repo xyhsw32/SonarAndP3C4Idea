@@ -20,6 +20,7 @@ import com.intellij.notification.Notifications;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -37,6 +38,7 @@ import org.sonarlint.intellij.actions.SonarConfigureProject;
 import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 import org.sonarlint.intellij.exception.InvalidBindingException;
 import org.sonarlint.intellij.util.SonarLintUtils;
+import org.sonarsource.sonarlint.core.client.api.exceptions.CanceledException;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -88,7 +90,8 @@ public class P3cUtils {
         return inspectionToolWrappers;
     }
 
-    public  static void scanFile(Project project, Collection<VirtualFile> virtualFiles)  {
+    public  static void scanFile(Project project, Collection<VirtualFile> virtualFiles, ProgressIndicator indicator)  {
+        indicator.setText("Running P3c Analysis for "+ virtualFiles.size()+ "files");
         AnalysisScope analysisScope= new AnalysisScope(project, new ArrayList<>(virtualFiles));
         InspectionManagerEx inspectionManagerEx = (InspectionManagerEx) InspectionManager.getInstance(project);
         GlobalInspectionContextImpl globalInspectionContext = new PmdGlobalInspectionContextImpl(inspectionManagerEx.getProject(), inspectionManagerEx.getContentManager(),false);
@@ -116,7 +119,12 @@ public class P3cUtils {
                         HighlightInfoProcessor.getEmpty(), INSPECT_INJECTED_PSI);
                 pass.doInspectInBatch(globalInspectionContext,inspectionManagerEx, getWrappersFromTools(toolsList, psiFile, true, wrapper -> !(wrapper.getTool() instanceof ExternalAnnotatorBatchInspection)));
             };
+            indicator.setText("P3c Scan Current file name: " + virtualFile.getName());
             ApplicationManager.getApplication().runReadAction(runnable);
+            if (indicator.isCanceled() || project.isDisposed() || Thread.currentThread().isInterrupted()) {
+              //TODO 通知终止完成
+                throw new CanceledException();
+            }
         }
     }
 

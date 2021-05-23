@@ -27,6 +27,18 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
+import org.sonarlint.intellij.analysis.AnalysisCallback;
+import org.sonarlint.intellij.analysis.SonarLintJob;
+import org.sonarlint.intellij.core.P3cUtils;
+import org.sonarlint.intellij.core.ServerIssueUpdater;
+import org.sonarlint.intellij.trigger.TriggerType;
+import org.sonarlint.intellij.ui.SonarLintConsole;
+import org.sonarlint.intellij.util.SonarLintUtils;
+import org.sonarsource.sonarlint.core.client.api.common.TextRange;
+import org.sonarsource.sonarlint.core.client.api.common.analysis.ClientInputFile;
+import org.sonarsource.sonarlint.core.client.api.common.analysis.Issue;
+import org.sonarsource.sonarlint.core.client.api.common.analysis.IssueLocation;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -38,16 +50,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.sonarlint.intellij.analysis.AnalysisCallback;
-import org.sonarlint.intellij.analysis.SonarLintJob;
-import org.sonarlint.intellij.core.ServerIssueUpdater;
-import org.sonarlint.intellij.trigger.TriggerType;
-import org.sonarlint.intellij.ui.SonarLintConsole;
-import org.sonarlint.intellij.util.SonarLintUtils;
-import org.sonarsource.sonarlint.core.client.api.common.TextRange;
-import org.sonarsource.sonarlint.core.client.api.common.analysis.ClientInputFile;
-import org.sonarsource.sonarlint.core.client.api.common.analysis.Issue;
-import org.sonarsource.sonarlint.core.client.api.common.analysis.IssueLocation;
 
 import static java.util.stream.Collectors.toList;
 import static org.sonarlint.intellij.issue.LocationKt.resolvedLocation;
@@ -98,6 +100,10 @@ public class IssueProcessor {
 
     AnalysisCallback callback = job.callback();
     callback.onSuccess(failedVirtualFiles);
+    /**
+     * 调起p3c扫描
+     */
+    P3cUtils.scanFile(myProject, job.allFiles().collect(Collectors.toList()),indicator);
   }
 
   private static Set<VirtualFile> asVirtualFiles(Collection<ClientInputFile> failedAnalysisFiles) {

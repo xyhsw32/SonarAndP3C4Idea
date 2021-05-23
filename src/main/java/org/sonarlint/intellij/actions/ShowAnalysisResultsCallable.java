@@ -22,17 +22,18 @@ package org.sonarlint.intellij.actions;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.ui.UIUtil;
+import org.sonarlint.intellij.analysis.AnalysisCallback;
+import org.sonarlint.intellij.core.P3cUtils;
+import org.sonarlint.intellij.issue.IssueManager;
+import org.sonarlint.intellij.issue.IssueStore;
+import org.sonarlint.intellij.issue.LiveIssue;
+import org.sonarlint.intellij.util.SonarLintUtils;
+
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.sonarlint.intellij.analysis.AnalysisCallback;
-import org.sonarlint.intellij.core.P3cUtils;
-import org.sonarlint.intellij.issue.IssueStore;
-import org.sonarlint.intellij.issue.IssueManager;
-import org.sonarlint.intellij.issue.LiveIssue;
-import org.sonarlint.intellij.util.SonarLintUtils;
 
 public class ShowAnalysisResultsCallable implements AnalysisCallback {
   private final Project project;
@@ -61,7 +62,7 @@ public class ShowAnalysisResultsCallable implements AnalysisCallback {
     /**
      * 调起p3c扫描
      */
-    P3cUtils.executeInspection(project, affectedFiles);
+    P3cUtils.scanFile(project, affectedFiles);
   }
 
   private void showAnalysisResultsTab() {

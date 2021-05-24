@@ -57,11 +57,6 @@ public class ProblemTreeNodeData {
     private String nodeType;
 
     /**
-     * 问题数量
-     */
-    private Integer problemCount;
-
-    /**
      * 问题行号
      */
     private Integer problemFromLine;
@@ -72,10 +67,24 @@ public class ProblemTreeNodeData {
     private String problemFromFilePath;
 
     /**
+     * 产生问题的文件名称
+     */
+    private String problemFromFileName;
+
+    /**
      * 问题描述模板
      */
     private String descriptionTemplate;
 
+    /**
+     * 文件所属语言名称
+     */
+    private String languageName;
+
+    /**
+     * 规则信息
+     */
+    private ScanRuleData scanRuleData;
 
     public String getName() {
         return name;
@@ -101,14 +110,6 @@ public class ProblemTreeNodeData {
         this.nodeType = nodeType;
     }
 
-    public Integer getProblemCount() {
-        return problemCount;
-    }
-
-    public void setProblemCount(Integer problemCount) {
-        this.problemCount = problemCount;
-    }
-
     public Integer getProblemFromLine() {
         return problemFromLine;
     }
@@ -131,5 +132,29 @@ public class ProblemTreeNodeData {
 
     public void setDescriptionTemplate(String descriptionTemplate) {
         this.descriptionTemplate = descriptionTemplate;
+    }
+
+    public String getProblemFromFileName() {
+        return problemFromFileName;
+    }
+
+    public void setProblemFromFileName(String problemFromFileName) {
+        this.problemFromFileName = problemFromFileName;
+    }
+
+    public String getLanguageName() {
+        return languageName;
+    }
+
+    public void setLanguageName(String languageName) {
+        this.languageName = languageName;
+    }
+
+    public ScanRuleData getScanRuleData() {
+        return scanRuleData;
+    }
+
+    public void setScanRuleData(ScanRuleData scanRuleData) {
+        this.scanRuleData = scanRuleData;
     }
 }

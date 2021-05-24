@@ -1,6 +1,7 @@
 package com.intellij.codeInsight.daemon.impl;
 
 
+import com.alibaba.p3c.idea.inspection.AliPmdInspection;
 import com.intellij.codeHighlighting.HighlightDisplayLevel;
 import com.intellij.codeHighlighting.Pass;
 import com.intellij.codeInsight.daemon.DaemonBundle;
@@ -9,8 +10,6 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightingLevelManager;
 import com.intellij.codeInsight.daemon.impl.quickfix.QuickFixAction;
 import com.intellij.codeInsight.intention.EmptyIntentionAction;
 import com.intellij.codeInsight.intention.IntentionAction;
-import com.intellij.codeInspection.CommonProblemDescriptor;
-import com.intellij.codeInspection.GlobalInspectionContext;
 import com.intellij.codeInspection.HintAction;
 import com.intellij.codeInspection.InspectionEngine;
 import com.intellij.codeInspection.InspectionManager;
@@ -36,9 +35,6 @@ import com.intellij.codeInspection.ex.InspectionToolWrapper;
 import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
 import com.intellij.codeInspection.ex.ProblemDescriptorImpl;
 import com.intellij.codeInspection.ex.QuickFixWrapper;
-import com.intellij.codeInspection.reference.RefElement;
-import com.intellij.codeInspection.reference.RefEntity;
-import com.intellij.codeInspection.ui.InspectionResultsView;
 import com.intellij.codeInspection.ui.InspectionToolPresentation;
 import com.intellij.concurrency.JobLauncher;
 import com.intellij.diagnostic.PluginException;
@@ -66,7 +62,6 @@ import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.profile.codeInspection.InspectionProfileManager;
 import com.intellij.profile.codeInspection.ProjectInspectionProfileManager;
 import com.intellij.psi.FileViewProvider;
 import com.intellij.psi.PsiDocumentManager;
@@ -79,7 +74,6 @@ import com.intellij.util.CommonProcessors;
 import com.intellij.util.ConcurrencyUtil;
 import com.intellij.util.Processor;
 import com.intellij.util.SmartList;
-import com.intellij.util.TripleFunction;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.Interner;
 import com.intellij.util.containers.SmartHashSet;
@@ -87,13 +81,13 @@ import com.intellij.util.containers.WeakInterner;
 import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.xml.util.XmlStringUtil;
 import ex.ProblemTreeNodeData;
+import ex.ScanRuleData;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +95,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
+import net.sourceforge.pmd.lang.rule.RuleReference;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -183,92 +178,42 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
         if (resultList == null) {
             return;
         }
-        //TODO result返回
         try {
-            Field batchModeDescriptorsUtilConvertField = BatchModeDescriptorsUtil.class.getDeclaredField("CONVERT");
-            batchModeDescriptorsUtilConvertField.setAccessible(true);
-            TripleFunction<LocalInspectionTool, PsiElement, GlobalInspectionContext,RefElement> batchModeDescriptorsUtilConvertFieldValue =
-                    (TripleFunction<LocalInspectionTool, PsiElement, GlobalInspectionContext,RefElement>)
-                    batchModeDescriptorsUtilConvertField.get(BatchModeDescriptorsUtil.class);
-            InspectionResultsView view = context.getView();
             List<ProblemTreeNodeData> problemTreeNodeDataList = new ArrayList<>();
+            String projectRoot = project.getBasePath().substring(0, project.getBasePath().lastIndexOf("/"));
             for (InspectionResult inspectionResult : resultList) {
                 LocalInspectionToolWrapper toolWrapper = inspectionResult.tool;
-                final String shortName = toolWrapper.getShortName();
-                InspectionToolPresentation presentation = context.getPresentation(toolWrapper);
-                Map<String, Set<RefEntity>> content = presentation.getContent();
-                System.out.println(content);
-
-                Map<RefElement, List<ProblemDescriptor>> problems = new HashMap<>();
+                LocalInspectionTool tool = toolWrapper.getTool();
+                Field aliPmdInspectionField = tool.getClass().getDeclaredField("aliPmdInspection");
+                aliPmdInspectionField.setAccessible(true);
+                AliPmdInspection aliPmdInspection = (AliPmdInspection)aliPmdInspectionField.get(tool);
+                Field aliPmdInspectionRuleField = aliPmdInspection.getClass().getDeclaredField("rule");
+                aliPmdInspectionRuleField.setAccessible(true);
+                RuleReference aliPmdInspectionRule = (RuleReference)aliPmdInspectionRuleField.get(aliPmdInspection);
                 for (ProblemDescriptor descriptor : inspectionResult.foundProblems) {
-
-                    PsiElement element = descriptor.getPsiElement();
-
-                    RefElement refElement = batchModeDescriptorsUtilConvertFieldValue.fun(toolWrapper.getTool(), element, context);
-                    List<ProblemDescriptor> elementProblems = problems.computeIfAbsent(refElement, __ -> new ArrayList<>());
-                    elementProblems.add(descriptor);
-                    int lineNumber = descriptor.getLineNumber();
-                    System.out.println("lineNumber = " + lineNumber);
-                }
-
-                for (Map.Entry<RefElement, List<ProblemDescriptor>> entry : problems.entrySet()) {
-                    List<ProblemDescriptor> problemDescriptors = entry.getValue();
-                    RefElement refElement = entry.getKey();
-                    CommonProblemDescriptor[] descriptions = problemDescriptors.toArray(CommonProblemDescriptor.EMPTY_ARRAY);
-                    for(CommonProblemDescriptor description : descriptions) {
-                        /*
-                        try {
-
-                            Method getToolProblemsRootNode = view.getTree().getClass().getDeclaredMethod("getToolProblemsRootNode",
-                                    InspectionToolWrapper.class,
-                                    HighlightDisplayLevel.class,
-                                    Boolean.class,
-                                    Boolean.class);
-                            getToolProblemsRootNode.setAccessible(true);
-                            InspectionTreeNode toolNode = (InspectionTreeNode) getToolProblemsRootNode.invoke(view.getTree(), toolWrapper,
-                                    HighlightDisplayLevel.find(presentation.getSeverity((RefElement) refElement)),
-                                    context.getUIOptions().GROUP_BY_SEVERITY, false);
-
-                            ProblemDescriptionNode problemDescriptionNode = new ProblemDescriptionNode(refElement, description, presentation, toolNode);
-
-                        } catch (NoSuchMethodException e) {
-                            e.printStackTrace();
-                        } catch (InvocationTargetException e) {
-                            e.printStackTrace();
-                        }
- */
-                        HighlightDisplayLevel highlightDisplayLevel = calculatePreciseLevel(refElement, description, presentation);
-                        System.out.println(highlightDisplayLevel);
-                    }
+                    ProblemTreeNodeData problemTreeNodeData = new ProblemTreeNodeData();
+                    problemTreeNodeData.setName(aliPmdInspection.getDisplayName());
+                    problemTreeNodeData.setProblemType(tool.getDefaultLevel().getSeverity().getName());
+                    problemTreeNodeData.setNodeType(ProblemTreeNodeData.NODE_TYPE_CHECK_ISSUE);
+                    problemTreeNodeData.setProblemFromLine(descriptor.getLineNumber());
+                    problemTreeNodeData.setProblemFromFileName(getFile().getVirtualFile().getName());
+                    problemTreeNodeData.setProblemFromFilePath(getFile().getVirtualFile().getPath().replaceFirst(projectRoot, ""));
+                    problemTreeNodeData.setDescriptionTemplate(aliPmdInspection.getStaticDescription());
+                    problemTreeNodeData.setLanguageName(aliPmdInspectionRule.getLanguage().getName());
+                    ScanRuleData scanRuleData = new ScanRuleData();
+                    scanRuleData.setName(aliPmdInspectionRule.getName());
+                    scanRuleData.setRuleSetName(aliPmdInspectionRule.getRuleSetName());
+                    scanRuleData.setPriority(aliPmdInspectionRule.getPriority());
+                    scanRuleData.setMessage(aliPmdInspectionRule.getMessage());
+                    scanRuleData.setExamples(aliPmdInspectionRule.getExamples());
+                    scanRuleData.setDescription(aliPmdInspectionRule.getDescription());
+                    problemTreeNodeData.setScanRuleData(scanRuleData);
+                    problemTreeNodeDataList.add(problemTreeNodeData);
                 }
              }
+            System.out.println(problemTreeNodeDataList);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             e.printStackTrace();
-        }
-    }
-
-    private HighlightDisplayLevel calculatePreciseLevel(@Nullable RefEntity element,
-                                                               @Nullable CommonProblemDescriptor descriptor,
-                                                               @NotNull InspectionToolPresentation presentation) {
-        if (element == null) {
-            return null;
-        }
-        final InspectionProfileImpl profile = presentation.getContext().getCurrentProfile();
-        String shortName = presentation.getToolWrapper().getShortName();
-        if (descriptor instanceof ProblemDescriptor) {
-            InspectionProfileManager inspectionProfileManager = profile.getProfileManager();
-            RefElement refElement = (RefElement)element;
-            SeverityRegistrar severityRegistrar = inspectionProfileManager.getSeverityRegistrar();
-            HighlightSeverity severity = presentation.getSeverity(refElement);
-            if (severity == null) {
-                return null;
-            }
-            HighlightInfoType highlightInfoType = ProblemDescriptorUtil.highlightTypeFromDescriptor((ProblemDescriptor)descriptor, severity, severityRegistrar);
-            HighlightSeverity highlightSeverity = highlightInfoType.getSeverity(refElement.getPsiElement());
-            return HighlightDisplayLevel.find(highlightSeverity);
-        }
-        else {
-            return profile.getTools(shortName, presentation.getContext().getProject()).getLevel();
         }
     }
 

@@ -22,10 +22,12 @@ import com.intellij.notification.Notifications;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.encoding.EncodingProjectManager;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
@@ -38,15 +40,24 @@ import ex.ProblemTreeNodeData;
 import icons.SonarLintIcons;
 import org.jetbrains.annotations.NotNull;
 import org.sonarlint.intellij.actions.SonarConfigureProject;
+import org.sonarlint.intellij.analysis.DefaultClientInputFile;
+import org.sonarlint.intellij.analysis.P3cAnalysisUtils;
+import org.sonarlint.intellij.analysis.RuleData;
+import org.sonarlint.intellij.analysis.SonarLintJob;
 import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 import org.sonarlint.intellij.exception.InvalidBindingException;
+import org.sonarlint.intellij.issue.LiveIssue;
 import org.sonarlint.intellij.messages.P3cAnalysisResultListener;
+import org.sonarlint.intellij.util.SonarLintAppUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
 import org.sonarsource.sonarlint.core.client.api.exceptions.CanceledException;
 
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -60,7 +71,7 @@ public class P3cUtils {
         InspectionManagerEx inspectionManagerEx = (InspectionManagerEx) InspectionManager.getInstance(project);
         GlobalInspectionContextImpl globalInspectionContext = new PmdGlobalInspectionContextImpl(inspectionManagerEx.getProject(), inspectionManagerEx.getContentManager(),false);
         List<InspectionToolWrapper<?, ?>> inspectionToolWrappers = Inspections.INSTANCE.aliInspections(project, inspectionToolWrapper -> inspectionToolWrapper.getTool() instanceof AliBaseInspection);
-        inspectionToolWrappers = filtSonarActiveRule(project, inspectionToolWrappers);
+//        inspectionToolWrappers = filtSonarActiveRule(project, inspectionToolWrappers);
         analysisScope.setIncludeTestSource(false);
         analysisScope.setSearchInLibraries(true);
         if (inspectionToolWrappers.isEmpty()){
@@ -72,29 +83,17 @@ public class P3cUtils {
         globalInspectionContext.doInspections(analysisScope);
     }
 
-    private static List<InspectionToolWrapper<?, ?>> filtSonarActiveRule(Project project, List<InspectionToolWrapper<?, ?>> inspectionToolWrappers) {
-        try {
-            ProjectBindingManager projectBindingManager = SonarLintUtils.getService(project, ProjectBindingManager.class);
-            SonarLintFacade sonarLintFacade = projectBindingManager.getFacade(true);
-            if (sonarLintFacade instanceof ConnectedSonarLintFacade){
-                ConnectedSonarLintFacade connectedSonarLintFacade = (ConnectedSonarLintFacade) sonarLintFacade;
-                SonarLintProjectSettings sonarLintProjectSettings = getSettingsFor(project);
-                List<String> ruleList = connectedSonarLintFacade.getActiveList(sonarLintProjectSettings.getProjectKey());
-                inspectionToolWrappers = inspectionToolWrappers.stream().filter(inspectionToolWrapper -> {
-                    AliBaseInspection aliBaseInspection = (AliBaseInspection) inspectionToolWrapper.getTool();
-                    String ruleName = aliBaseInspection.ruleName();
-                    return ruleList.contains(ruleName);
-                }).collect(Collectors.toList());
-            }else{
-                Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","Sonar server is not configured","Please configure the sonar server", NotificationType.ERROR,null).addAction(new SonarConfigureProject("Sonarqube config")));
-            }
-        } catch (InvalidBindingException e) {
-            e.printStackTrace();
-        }
+    private static List<InspectionToolWrapper<?, ?>> filtSonarActiveRule(Collection<String> ruleList, List<InspectionToolWrapper<?, ?>> inspectionToolWrappers) {
+        inspectionToolWrappers = inspectionToolWrappers.stream().filter(inspectionToolWrapper -> {
+            AliBaseInspection aliBaseInspection = (AliBaseInspection) inspectionToolWrapper.getTool();
+            String ruleName = aliBaseInspection.ruleName();
+            return ruleList.contains(ruleName);
+        }).collect(Collectors.toList());
         return inspectionToolWrappers;
     }
 
-    public  static void scanFile(Project project, Collection<VirtualFile> virtualFiles, ProgressIndicator indicator)  {
+    public static void scanFile(Project project, SonarLintJob job, ProgressIndicator indicator,Map<VirtualFile, Collection<LiveIssue>> issues)  {
+        List<VirtualFile> virtualFiles = job.allFiles().collect(Collectors.toList());
         indicator.setText("Running P3c Analysis for "+ virtualFiles.size()+ "files");
         AnalysisScope analysisScope= new AnalysisScope(project, new ArrayList<>(virtualFiles));
         InspectionManagerEx inspectionManagerEx = (InspectionManagerEx) InspectionManager.getInstance(project);
@@ -102,7 +101,9 @@ public class P3cUtils {
         RefManager refManager = globalInspectionContext.getRefManager();
         ((RefManagerImpl)refManager).inspectionReadActionStarted();
         List<InspectionToolWrapper<?, ?>> inspectionToolWrappers = Inspections.INSTANCE.aliInspections(project, inspectionToolWrapper -> inspectionToolWrapper.getTool() instanceof AliBaseInspection);
-//        inspectionToolWrappers = filtSonarActiveRule(project, inspectionToolWrappers);
+        RuleData ruleData = getRuleData(project);
+        Set<String> ruleSet = ruleData.getActiveRuleMap().keySet();
+        inspectionToolWrappers = filtSonarActiveRule(ruleSet, inspectionToolWrappers);
         analysisScope.setIncludeTestSource(false);
         analysisScope.setSearchInLibraries(true);
         if (inspectionToolWrappers.isEmpty()){
@@ -115,44 +116,49 @@ public class P3cUtils {
         analysisScope.setSearchInLibraries(true);
         SearchScope searchScope = ReadAction.compute(analysisScope::toSearchScope);
         List<Tools> toolsList = globalInspectionContext.getUsedTools();
-//        InspectionResultsView inspectionResultsView = new InspectionResultsView(globalInspectionContext, new InspectionRVContentProviderImpl());
-//        Class clazz=GlobalInspectionContextImpl.class;//获取字节码对象
-//        Field f= null;
-//        try {
-//            f = clazz.getDeclaredField("myView");
-//            f.setAccessible(true);
-//            f.set(globalInspectionContext,inspectionResultsView);
-//        } catch (NoSuchFieldException | IllegalAccessException e) {
-//            e.printStackTrace();
-//        }
-//        ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(project);
-//        ToolWindow toolWindow = toolWindowManager.getToolWindow("SonarLint");
-//        ContentManager contentManager = toolWindow.getContentManager();
-//        Content content = contentManager.getFactory().createContent(inspectionResultsView, "p3c", false);
-//        content.setHelpId(InspectionResultsView.HELP_ID);
-//        content.setDisposer(inspectionResultsView);
-//        contentManager.addContent(content);
-//        contentManager.setSelectedContent(content);
-        for (VirtualFile virtualFile : virtualFiles) {
-            Runnable runnable = () -> {
-                PsiFile psiFile = PsiManager.getInstance(project).findFile(virtualFile);
-                Document document = PsiDocumentManager.getInstance(project).getDocument(psiFile);
-                TextRange textRange = getEffectiveRange(searchScope, psiFile);
-                LocalInspectionsCustomPass pass = new LocalInspectionsCustomPass(psiFile, document, textRange.getStartOffset(),
-                        textRange.getEndOffset(), LocalInspectionsCustomPass.EMPTY_PRIORITY_RANGE, true,
-                        HighlightInfoProcessor.getEmpty(), INSPECT_INJECTED_PSI);
-                pass.doInspectInBatch(globalInspectionContext,inspectionManagerEx, getWrappersFromTools(toolsList, psiFile, true, wrapper -> !(wrapper.getTool() instanceof ExternalAnnotatorBatchInspection)),project);
-            };
-            indicator.setText("P3c Scan Current file name: " + virtualFile.getName());
-            ApplicationManager.getApplication().runReadAction(runnable);
-            if (indicator.isCanceled() || project.isDisposed() || Thread.currentThread().isInterrupted()) {
-              //TODO 通知终止完成
-                project.getMessageBus().syncPublisher(P3cAnalysisResultListener.P3C_ANALYSIS_TOPIC).canceled(project);
-                throw new CanceledException();
+        for (Map.Entry<Module, Collection<VirtualFile>> e : job.filesPerModule().entrySet()) {
+            Module module = e.getKey();
+            for (VirtualFile virtualFile:e.getValue()){
+                String relativePath = SonarLintAppUtils.getRelativePathForAnalysis(module, virtualFile);
+                DefaultClientInputFile defaultClientInputFile = P3cAnalysisUtils.createClientInputFile(virtualFile, relativePath, getEncoding(virtualFile, project));
+                Runnable runnable = () -> {
+                    PsiFile psiFile = PsiManager.getInstance(project).findFile(virtualFile);
+                    Document document = PsiDocumentManager.getInstance(project).getDocument(psiFile);
+                    TextRange textRange = getEffectiveRange(searchScope, psiFile);
+                    LocalInspectionsCustomPass pass = new LocalInspectionsCustomPass(psiFile, document, textRange.getStartOffset(),
+                            textRange.getEndOffset(), LocalInspectionsCustomPass.EMPTY_PRIORITY_RANGE, true,
+                            HighlightInfoProcessor.getEmpty(), INSPECT_INJECTED_PSI);
+                    pass.doInspectInBatch(virtualFile,psiFile,defaultClientInputFile,ruleData,globalInspectionContext,inspectionManagerEx, getWrappersFromTools(toolsList, psiFile, true, wrapper -> !(wrapper.getTool() instanceof ExternalAnnotatorBatchInspection)),project,issues);
+                };
+                indicator.setText("P3c Scan Current file name: " + virtualFile.getName());
+                ApplicationManager.getApplication().runReadAction(runnable);
+                if (indicator.isCanceled() || project.isDisposed() || Thread.currentThread().isInterrupted()) {
+                    project.getMessageBus().syncPublisher(P3cAnalysisResultListener.P3C_ANALYSIS_TOPIC).canceled(project);
+                    throw new CanceledException();
+                }
             }
         }
         ((RefManagerImpl)refManager).inspectionReadActionFinished();
         project.getMessageBus().syncPublisher(P3cAnalysisResultListener.P3C_ANALYSIS_TOPIC).completed(project);
+    }
+
+    private static RuleData getRuleData(Project project) {
+        ProjectBindingManager projectBindingManager = SonarLintUtils.getService(project, ProjectBindingManager.class);
+        SonarLintFacade sonarLintFacade = null;
+        try {
+            sonarLintFacade = projectBindingManager.getFacade(true);
+        } catch (InvalidBindingException e) {
+            e.printStackTrace();
+        }
+        if (sonarLintFacade instanceof ConnectedSonarLintFacade){
+            ConnectedSonarLintFacade connectedSonarLintFacade = (ConnectedSonarLintFacade) sonarLintFacade;
+            SonarLintProjectSettings sonarLintProjectSettings = getSettingsFor(project);
+            RuleData ruleData = connectedSonarLintFacade.getRuleData(sonarLintProjectSettings.getProjectKey());
+            return ruleData;
+        }else{
+            Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","Sonar server is not configured","Please configure the sonar server", NotificationType.ERROR,null).addAction(new SonarConfigureProject("Sonarqube config")));
+            return null;
+        }
     }
 
 
@@ -192,5 +198,14 @@ public class P3cUtils {
 
     public static List<ProblemTreeNodeData> transCommonScanResultFromP3cResult() {
         return null;
+    }
+
+    private static Charset getEncoding(VirtualFile f,Project project) {
+        EncodingProjectManager encodingProjectManager = EncodingProjectManager.getInstance(project);
+        Charset encoding = encodingProjectManager.getEncoding(f, true);
+        if (encoding != null) {
+            return encoding;
+        }
+        return Charset.defaultCharset();
     }
 }

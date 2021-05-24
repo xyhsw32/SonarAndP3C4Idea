@@ -23,11 +23,17 @@ import com.google.common.base.Preconditions;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import org.sonar.api.batch.rule.ActiveRule;
+import org.sonar.api.batch.rule.Rule;
+import org.sonar.api.batch.sensor.issue.Issue;
+import org.sonar.api.rule.RuleKey;
+import org.sonarlint.intellij.analysis.RuleData;
 import org.sonarlint.intellij.ui.SonarLintConsole;
 import org.sonarlint.intellij.util.ProjectLogOutput;
 import org.sonarlint.intellij.util.SonarLintAppUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
 import org.sonarsource.sonarlint.core.ConnectedSonarLintEngineImpl;
+import org.sonarsource.sonarlint.core.analyzer.issue.DefaultFlow;
 import org.sonarsource.sonarlint.core.client.api.common.PluginDetails;
 import org.sonarsource.sonarlint.core.client.api.common.ProgressMonitor;
 import org.sonarsource.sonarlint.core.client.api.common.analysis.AnalysisResults;
@@ -37,14 +43,23 @@ import org.sonarsource.sonarlint.core.client.api.connected.ConnectedAnalysisConf
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedRuleDetails;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
 import org.sonarsource.sonarlint.core.client.api.connected.ProjectBinding;
+import org.sonarsource.sonarlint.core.client.api.exceptions.StorageException;
+import org.sonarsource.sonarlint.core.container.storage.StorageActiveRuleAdapter;
 import org.sonarsource.sonarlint.core.container.storage.StorageReader;
+import org.sonarsource.sonarlint.core.container.storage.StorageRuleAdapter;
 import org.sonarsource.sonarlint.core.proto.Sonarlint;
 
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import static java.util.stream.Collectors.toList;
 import static org.sonarlint.intellij.config.Settings.getSettingsFor;
 
 class ConnectedSonarLintFacade extends SonarLintFacade {
@@ -131,5 +146,57 @@ class ConnectedSonarLintFacade extends SonarLintFacade {
       }
     }
     return activeRulesList;
+  }
+  public RuleData getRuleData(String projectKey){
+    RuleData ruleData = new RuleData();
+    HashMap<String, ActiveRule> activeRuleMap = new HashMap<>();
+    HashMap<String, Rule> ruleMap = new HashMap<>();
+    ruleData.setRuleMap(ruleMap);
+    ruleData.setActiveRuleMap(activeRuleMap);
+    ConnectedSonarLintEngineImpl connectedSonarLintEngine = (ConnectedSonarLintEngineImpl) this.engine;
+    StorageReader storageReader = connectedSonarLintEngine.getGlobalContainer().getComponentByType(StorageReader.class);
+    Map<String, String> qProfilesByLanguage = storageReader.readProjectConfig(projectKey).getQprofilePerLanguageMap();
+    for (Map.Entry<String, String> entry : qProfilesByLanguage.entrySet()) {
+      String language = entry.getKey();
+      String qProfileKey = entry.getValue();
+      if (language.equals("java")){
+        Sonarlint.ActiveRules activeRulesFromStorage = storageReader.readActiveRules(qProfileKey);
+        Sonarlint.Rules rules = storageReader.readRules();
+        for (Sonarlint.ActiveRules.ActiveRule activeRule : activeRulesFromStorage.getActiveRulesByKeyMap().values()) {
+          if (activeRule.getRepo().equals("pmd")){
+            ActiveRule activeRule1 = createNewActiveRule(activeRule, rules);
+            activeRuleMap.put(activeRule.getKey(),activeRule1);
+          }
+        }
+        for (Map.Entry<String, Sonarlint.Rules.Rule> rule : rules.getRulesByKeyMap().entrySet()) {
+          if (rule.getValue().getRepo().equals("pmd")) {
+            Sonarlint.Rules.Rule r = rule.getValue();
+            StorageRuleAdapter storageRuleAdapter = new StorageRuleAdapter(r);
+            ruleMap.put(storageRuleAdapter.key().rule(), storageRuleAdapter);
+          }
+        }
+      }
+    }
+    return ruleData;
+  }
+  private static org.sonar.api.batch.rule.ActiveRule createNewActiveRule(Sonarlint.ActiveRules.ActiveRule activeRule, Sonarlint.Rules storageRules) {
+    RuleKey ruleKey = RuleKey.of(activeRule.getRepo(), activeRule.getKey());
+    Sonarlint.Rules.Rule storageRule;
+    try {
+      storageRule = storageRules.getRulesByKeyOrThrow(ruleKey.toString());
+    } catch (IllegalArgumentException e) {
+      throw new StorageException("Unknown active rule in the quality profile of the project. Please update the SonarQube server binding.", e);
+    }
+
+    return new StorageActiveRuleAdapter(activeRule, storageRule);
+  }
+
+  private static List<org.sonarsource.sonarlint.core.client.api.common.analysis.Issue.Flow> mapFlows(List<Issue.Flow> flows) {
+    return flows.stream()
+            .map(f -> new DefaultFlow(f.locations()
+                    .stream()
+                    .collect(toList())))
+            .filter(f -> !f.locations().isEmpty())
+            .collect(toList());
   }
 }

@@ -71,6 +71,7 @@ public class IssueProcessor {
       manager.clear(job.filesToClearIssues());
       Map<VirtualFile, Collection<LiveIssue>> issues = transformIssues(rawIssues, job.allFiles().collect(toList()), failedAnalysisFiles);
       // this might be updated later after tracking with server issues
+      P3cUtils.scanFile(myProject, job,indicator,issues);
       manager.store(issues);
       return issues;
     });
@@ -103,7 +104,6 @@ public class IssueProcessor {
     /**
      * 调起p3c扫描
      */
-    P3cUtils.scanFile(myProject, job.allFiles().collect(Collectors.toList()),indicator);
   }
 
   private static Set<VirtualFile> asVirtualFiles(Collection<ClientInputFile> failedAnalysisFiles) {

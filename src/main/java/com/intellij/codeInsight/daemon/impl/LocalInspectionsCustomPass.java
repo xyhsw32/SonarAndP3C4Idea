@@ -178,9 +178,21 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
         if (resultList == null) {
             return;
         }
+        List<ProblemTreeNodeData> problemTreeNodeDataList = transScanResultData(project, resultList);
+        System.out.println(problemTreeNodeDataList);
+    }
+
+    /**
+     * 解析p3c扫描结果未自定义数据类型
+     *
+     * @param project
+     * @param resultList
+     * @return
+     */
+    private List<ProblemTreeNodeData> transScanResultData(Project project, List<InspectionResult> resultList) {
+        List<ProblemTreeNodeData> problemTreeNodeDataList = new ArrayList<>();
+        String projectRoot = project.getBasePath().substring(0, project.getBasePath().lastIndexOf("/"));
         try {
-            List<ProblemTreeNodeData> problemTreeNodeDataList = new ArrayList<>();
-            String projectRoot = project.getBasePath().substring(0, project.getBasePath().lastIndexOf("/"));
             for (InspectionResult inspectionResult : resultList) {
                 LocalInspectionToolWrapper toolWrapper = inspectionResult.tool;
                 LocalInspectionTool tool = toolWrapper.getTool();
@@ -210,11 +222,11 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
                     problemTreeNodeData.setScanRuleData(scanRuleData);
                     problemTreeNodeDataList.add(problemTreeNodeData);
                 }
-             }
-            System.out.println(problemTreeNodeDataList);
+            }
         } catch (NoSuchFieldException | IllegalAccessException e) {
             e.printStackTrace();
         }
+        return problemTreeNodeDataList;
     }
 
     private void addDescriptors(@NotNull LocalInspectionToolWrapper toolWrapper,

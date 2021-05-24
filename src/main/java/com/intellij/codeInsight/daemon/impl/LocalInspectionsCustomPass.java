@@ -9,34 +9,14 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightingLevelManager;
 import com.intellij.codeInsight.daemon.impl.quickfix.QuickFixAction;
 import com.intellij.codeInsight.intention.EmptyIntentionAction;
 import com.intellij.codeInsight.intention.IntentionAction;
-import com.intellij.codeInspection.HintAction;
-import com.intellij.codeInspection.InspectionEngine;
-import com.intellij.codeInspection.InspectionManager;
-import com.intellij.codeInspection.InspectionProfile;
-import com.intellij.codeInspection.InspectionSuppressor;
-import com.intellij.codeInspection.LanguageInspectionSuppressors;
-import com.intellij.codeInspection.LocalInspectionTool;
-import com.intellij.codeInspection.LocalInspectionToolSession;
-import com.intellij.codeInspection.ProblemDescriptor;
-import com.intellij.codeInspection.ProblemDescriptorBase;
-import com.intellij.codeInspection.ProblemDescriptorUtil;
-import com.intellij.codeInspection.ProblemHighlightType;
-import com.intellij.codeInspection.ProblemsHolder;
-import com.intellij.codeInspection.QuickFix;
-import com.intellij.codeInspection.RedundantSuppressInspection;
-import com.intellij.codeInspection.RedundantSuppressionDetector;
-import com.intellij.codeInspection.ex.BatchModeDescriptorsUtil;
-import com.intellij.codeInspection.ex.GlobalInspectionContextImpl;
-import com.intellij.codeInspection.ex.GlobalInspectionToolWrapper;
-import com.intellij.codeInspection.ex.InspectionElementsMerger;
-import com.intellij.codeInspection.ex.InspectionProfileImpl;
-import com.intellij.codeInspection.ex.InspectionProfileWrapper;
-import com.intellij.codeInspection.ex.InspectionToolWrapper;
-import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
-import com.intellij.codeInspection.ex.ProblemDescriptorImpl;
-import com.intellij.codeInspection.ex.QuickFixWrapper;
+import com.intellij.codeInspection.*;
+import com.intellij.codeInspection.ex.*;
 import com.intellij.codeInspection.reference.RefElement;
+import com.intellij.codeInspection.reference.RefEntity;
 import com.intellij.codeInspection.ui.InspectionToolPresentation;
+import com.intellij.codeInspection.ui.InspectionTreeNode;
+import com.intellij.codeInspection.ui.ProblemDescriptionNode;
+import com.intellij.codeInspection.ui.RefElementNode;
 import com.intellij.concurrency.JobLauncher;
 import com.intellij.diagnostic.PluginException;
 import com.intellij.injected.editor.DocumentWindow;
@@ -55,6 +35,7 @@ import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.keymap.Keymap;
 import com.intellij.openapi.keymap.KeymapManager;
 import com.intellij.openapi.keymap.KeymapUtil;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
@@ -64,23 +45,16 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.profile.codeInspection.ProjectInspectionProfileManager;
-import com.intellij.psi.FileViewProvider;
-import com.intellij.psi.PsiDocumentManager;
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiElementVisitor;
-import com.intellij.psi.PsiFile;
-import com.intellij.psi.PsiRecursiveElementVisitor;
-import com.intellij.util.AstLoadingFilter;
-import com.intellij.util.CommonProcessors;
-import com.intellij.util.ConcurrencyUtil;
-import com.intellij.util.Processor;
-import com.intellij.util.SmartList;
+import com.intellij.psi.*;
+import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.Interner;
+import com.intellij.util.containers.MultiMap;
 import com.intellij.util.containers.SmartHashSet;
 import com.intellij.util.containers.WeakInterner;
 import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.xml.util.XmlStringUtil;
+import ex.ProblemTreeNodeData;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NonNls;
@@ -88,13 +62,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.sonarlint.intellij.messages.P3cAnalysisResultListener;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.lang.reflect.Field;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
@@ -166,6 +135,7 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
     }
 
     private static final Set<String> ourToolsWithInformationProblems = new HashSet<>();
+
     public void doInspectInBatch(@NotNull final GlobalInspectionContextImpl context,
                                  @NotNull final InspectionManager iManager,
                                  @NotNull final List<? extends LocalInspectionToolWrapper> toolWrappers, Project project) {
@@ -173,27 +143,48 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
         inspect(new ArrayList<>(toolWrappers), iManager, false, progress);
         addDescriptorsFromInjectedResults(context);
         List<InspectionResult> resultList = result.get(getFile());
-        if (resultList == null) return;
-        project.getMessageBus().syncPublisher(P3cAnalysisResultListener.P3C_ANALYSIS_TOPIC).fileResult(project,resultList);
+        if (resultList == null) {
+            return;
+        }
         //TODO result返回
-        for (InspectionResult inspectionResult : resultList) {
-            LocalInspectionToolWrapper toolWrapper = inspectionResult.tool;
-            final String shortName = toolWrapper.getShortName();
-            for (ProblemDescriptor descriptor : inspectionResult.foundProblems) {
-                RefElement refElement = BatchModeDescriptorsUtil.CONVERT.fun(toolWrapper.getTool(), descriptor.getPsiElement(), context);
-                System.out.println(1);
-                if (descriptor.getHighlightType() == ProblemHighlightType.INFORMATION) {
-                    if (ourToolsWithInformationProblems.add(shortName)) {
-                        LOG.error("Tool #" + shortName + " registers INFORMATION level problem in batch mode on " + getFile() + ". " +
-                                "INFORMATION level 'warnings' are invisible in the editor and should not become visible in batch mode. " +
-                                "Moreover, cause INFORMATION level fixes act more like intention actions, they could e.g. change semantics and " +
-                                "thus should not be suggested for batch transformations");
-                    }
-                    continue;
-                    //TODO UI注入数据
-                    //   addDescriptors(toolWrapper, descriptor, context);
+        try {
+            Field batchModeDescriptorsUtilConvertField = BatchModeDescriptorsUtil.class.getDeclaredField("CONVERT");
+            batchModeDescriptorsUtilConvertField.setAccessible(true);
+            TripleFunction<LocalInspectionTool, PsiElement, GlobalInspectionContext,RefElement> batchModeDescriptorsUtilConvertFieldValue =
+                    (TripleFunction<LocalInspectionTool, PsiElement, GlobalInspectionContext,RefElement>)
+                    batchModeDescriptorsUtilConvertField.get(BatchModeDescriptorsUtil.class);
+            List<ProblemTreeNodeData> problemTreeNodeDataList = new ArrayList<>();
+            for (InspectionResult inspectionResult : resultList) {
+                LocalInspectionToolWrapper toolWrapper = inspectionResult.tool;
+                final String shortName = toolWrapper.getShortName();
+                InspectionToolPresentation presentation = context.getPresentation(toolWrapper);
+                Map<String, Set<RefEntity>> content = presentation.getContent();
+                System.out.println(content);
+
+                Map<RefElement, List<ProblemDescriptor>> problems = new HashMap<>();
+                for (ProblemDescriptor descriptor : inspectionResult.foundProblems) {
+
+                    PsiElement element = descriptor.getPsiElement();
+
+                    RefElement refElement = batchModeDescriptorsUtilConvertFieldValue.fun(toolWrapper.getTool(), element, context);
+                    List<ProblemDescriptor> elementProblems = problems.computeIfAbsent(refElement, __ -> new ArrayList<>());
+                    elementProblems.add(descriptor);
+                    int lineNumber = descriptor.getLineNumber();
+                    System.out.println("lineNumber = " + lineNumber);
                 }
-            }
+
+                for (Map.Entry<RefElement, List<ProblemDescriptor>> entry : problems.entrySet()) {
+                    final List<ProblemDescriptor> problemDescriptors = entry.getValue();
+                    RefElement refElement = entry.getKey();
+                    CommonProblemDescriptor[] descriptions = problemDescriptors.toArray(CommonProblemDescriptor.EMPTY_ARRAY);
+                    for(CommonProblemDescriptor description : descriptions) {
+                        ProblemDescriptionNode problemDescriptionNode = new ProblemDescriptionNode(refElement, description, presentation, null);
+                        System.out.println(problemDescriptionNode);
+                    }
+                }
+             }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            e.printStackTrace();
         }
     }
 

@@ -34,6 +34,7 @@ import com.intellij.psi.search.LocalSearchScope;
 import com.intellij.psi.search.SearchScope;
 import com.intellij.util.SystemProperties;
 import com.intellij.util.containers.ContainerUtil;
+import ex.ProblemTreeNodeData;
 import icons.SonarLintIcons;
 import org.jetbrains.annotations.NotNull;
 import org.sonarlint.intellij.actions.SonarConfigureProject;
@@ -186,5 +187,10 @@ public class P3cUtils {
             if (unwrapped == null) return null;
             return filter.test(unwrapped) ? unwrapped : null;
         });
+    }
+
+
+    public static List<ProblemTreeNodeData> transCommonScanResultFromP3cResult() {
+        return null;
     }
 }

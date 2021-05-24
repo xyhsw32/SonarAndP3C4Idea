@@ -74,7 +74,7 @@ public class ProblemTreeNodeData {
     /**
      * 问题描述模板
      */
-    private String descriptionTemplate;
+    private String staticDescription;
 
     /**
      * 文件所属语言名称
@@ -126,12 +126,12 @@ public class ProblemTreeNodeData {
         this.problemFromFilePath = problemFromFilePath;
     }
 
-    public String getDescriptionTemplate() {
-        return descriptionTemplate;
+    public String getStaticDescription() {
+        return staticDescription;
     }
 
-    public void setDescriptionTemplate(String descriptionTemplate) {
-        this.descriptionTemplate = descriptionTemplate;
+    public void setStaticDescription(String staticDescription) {
+        this.staticDescription = staticDescription;
     }
 
     public String getProblemFromFileName() {

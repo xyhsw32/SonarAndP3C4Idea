@@ -204,13 +204,13 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
                 RuleReference aliPmdInspectionRule = (RuleReference)aliPmdInspectionRuleField.get(aliPmdInspection);
                 for (ProblemDescriptor descriptor : inspectionResult.foundProblems) {
                     ProblemTreeNodeData problemTreeNodeData = new ProblemTreeNodeData();
-                    problemTreeNodeData.setName(aliPmdInspection.getDisplayName());
+                    problemTreeNodeData.setName(descriptor.getDescriptionTemplate());
                     problemTreeNodeData.setProblemType(tool.getDefaultLevel().getSeverity().getName());
                     problemTreeNodeData.setNodeType(ProblemTreeNodeData.NODE_TYPE_CHECK_ISSUE);
                     problemTreeNodeData.setProblemFromLine(descriptor.getLineNumber());
                     problemTreeNodeData.setProblemFromFileName(getFile().getVirtualFile().getName());
                     problemTreeNodeData.setProblemFromFilePath(getFile().getVirtualFile().getPath().replaceFirst(projectRoot, ""));
-                    problemTreeNodeData.setDescriptionTemplate(aliPmdInspection.getStaticDescription());
+                    problemTreeNodeData.setStaticDescription(aliPmdInspection.getStaticDescription());
                     problemTreeNodeData.setLanguageName(aliPmdInspectionRule.getLanguage().getName());
                     ScanRuleData scanRuleData = new ScanRuleData();
                     scanRuleData.setName(aliPmdInspectionRule.getName());

@@ -102,6 +102,9 @@ public class P3cUtils {
         ((RefManagerImpl)refManager).inspectionReadActionStarted();
         List<InspectionToolWrapper<?, ?>> inspectionToolWrappers = Inspections.INSTANCE.aliInspections(project, inspectionToolWrapper -> inspectionToolWrapper.getTool() instanceof AliBaseInspection);
         RuleData ruleData = getRuleData(project);
+        if (ruleData==null){
+            return;
+        }
         Set<String> ruleSet = ruleData.getActiveRuleMap().keySet();
         inspectionToolWrappers = filtSonarActiveRule(ruleSet, inspectionToolWrappers);
         analysisScope.setIncludeTestSource(false);

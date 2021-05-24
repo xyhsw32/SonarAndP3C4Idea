@@ -131,7 +131,7 @@ public class P3cUtils {
                     LocalInspectionsCustomPass pass = new LocalInspectionsCustomPass(psiFile, document, textRange.getStartOffset(),
                             textRange.getEndOffset(), LocalInspectionsCustomPass.EMPTY_PRIORITY_RANGE, true,
                             HighlightInfoProcessor.getEmpty(), INSPECT_INJECTED_PSI);
-                    pass.doInspectInBatch(virtualFile,psiFile,defaultClientInputFile,ruleData,globalInspectionContext,inspectionManagerEx, getWrappersFromTools(toolsList, psiFile, true, wrapper -> !(wrapper.getTool() instanceof ExternalAnnotatorBatchInspection)),project,issues);
+                    pass.doInspectInBatch(document,virtualFile,psiFile,defaultClientInputFile,ruleData,globalInspectionContext,inspectionManagerEx, getWrappersFromTools(toolsList, psiFile, true, wrapper -> !(wrapper.getTool() instanceof ExternalAnnotatorBatchInspection)),project,issues);
                 };
                 indicator.setText("P3c Scan Current file name: " + virtualFile.getName());
                 ApplicationManager.getApplication().runReadAction(runnable);

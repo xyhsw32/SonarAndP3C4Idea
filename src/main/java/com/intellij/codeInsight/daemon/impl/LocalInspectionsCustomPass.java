@@ -181,7 +181,7 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
 
     private static final Set<String> ourToolsWithInformationProblems = new HashSet<>();
 
-    public void doInspectInBatch(VirtualFile virtualFile,PsiFile psiFile,DefaultClientInputFile defaultClientInputFile, RuleData ruleData, @NotNull final GlobalInspectionContextImpl context,
+    public void doInspectInBatch(Document document,VirtualFile virtualFile,PsiFile psiFile,DefaultClientInputFile defaultClientInputFile, RuleData ruleData, @NotNull final GlobalInspectionContextImpl context,
                                  @NotNull final InspectionManager iManager,
                                  @NotNull final List<? extends LocalInspectionToolWrapper> toolWrappers, Project project,Map<VirtualFile, Collection<LiveIssue>> issues) {
         final ProgressIndicator progress = ProgressManager.getInstance().getProgressIndicator();
@@ -191,7 +191,7 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
         if (resultList == null) {
             return;
         }
-        saveDataToSonarLint(virtualFile, psiFile, defaultClientInputFile, ruleData, context, project, issues, resultList);
+        saveDataToSonarLint(document,virtualFile, psiFile, defaultClientInputFile, ruleData, context, project, issues, resultList);
         //TODO result返回
 //        try {
 //            Field batchModeDescriptorsUtilConvertField = BatchModeDescriptorsUtil.class.getDeclaredField("CONVERT");
@@ -253,7 +253,7 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
 //        }
     }
 
-    private void saveDataToSonarLint(VirtualFile virtualFile, PsiFile psiFile, DefaultClientInputFile defaultClientInputFile, RuleData ruleData, @NotNull GlobalInspectionContextImpl context, Project project, Map<VirtualFile, Collection<LiveIssue>> issues, List<InspectionResult> resultList) {
+    private void saveDataToSonarLint(Document document,VirtualFile virtualFile, PsiFile psiFile, DefaultClientInputFile defaultClientInputFile, RuleData ruleData, @NotNull GlobalInspectionContextImpl context, Project project, Map<VirtualFile, Collection<LiveIssue>> issues, List<InspectionResult> resultList) {
         Map<String, Rule> ruleMap = ruleData.getRuleMap();
         Map<String, ActiveRule> activeRuleMap = ruleData.getActiveRuleMap();
         for (InspectionResult inspectionResult : resultList) {
@@ -265,8 +265,15 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
             for (ProblemDescriptor descriptor : inspectionResult.foundProblems) {
                 PsiElement element = descriptor.getPsiElement();
                 int lineNumber = descriptor.getLineNumber();
-                org.sonarsource.sonarlint.core.client.api.common.TextRange sonarTextRange = new org.sonarsource.sonarlint.core.client.api.common.TextRange(lineNumber,-1,lineNumber,-1);
-                DefaultTextRange defaultTextRange = new DefaultTextRange(new DefaultTextPointer(lineNumber, -1), new DefaultTextPointer(lineNumber, -1));
+                TextRange textRange = descriptor.getStartElement().getTextRange();
+                int startOffset = textRange.getStartOffset();
+                int endOffset = textRange.getEndOffset();
+                int startLineNum = document.getLineNumber(startOffset);
+                int endLineNum = document.getLineNumber(endOffset);
+                int lineStartOffset = document.getLineStartOffset(startLineNum);
+                int lineEndOffset = document.getLineStartOffset(endLineNum);
+                org.sonarsource.sonarlint.core.client.api.common.TextRange sonarTextRange = new org.sonarsource.sonarlint.core.client.api.common.TextRange(startLineNum+1,startOffset-lineStartOffset,endLineNum+1,endOffset-lineEndOffset);
+                DefaultTextRange defaultTextRange = new DefaultTextRange(new DefaultTextPointer(startLineNum+1, startOffset-lineStartOffset), new DefaultTextPointer(endLineNum+1, endOffset-lineEndOffset));
                 DefaultClientIssue defaultClientIssue = new DefaultClientIssue(sonarLintRule.severity(), sonarLintRule.type().name(), activeRule, sonarLintRule, descriptor.getDescriptionTemplate(), defaultTextRange, defaultClientInputFile, new ArrayList<>());
                 IssueMatcher issueMatcher = new IssueMatcher(project);
                 try {

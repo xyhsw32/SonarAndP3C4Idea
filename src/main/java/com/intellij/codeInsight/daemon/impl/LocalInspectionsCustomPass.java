@@ -13,7 +13,9 @@ import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.ex.*;
 import com.intellij.codeInspection.reference.RefElement;
 import com.intellij.codeInspection.reference.RefEntity;
+import com.intellij.codeInspection.ui.InspectionResultsView;
 import com.intellij.codeInspection.ui.InspectionToolPresentation;
+import com.intellij.codeInspection.ui.InspectionTree;
 import com.intellij.codeInspection.ui.InspectionTreeNode;
 import com.intellij.codeInspection.ui.ProblemDescriptionNode;
 import com.intellij.codeInspection.ui.RefElementNode;
@@ -44,6 +46,7 @@ import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.profile.codeInspection.InspectionProfileManager;
 import com.intellij.profile.codeInspection.ProjectInspectionProfileManager;
 import com.intellij.psi.*;
 import com.intellij.util.*;
@@ -63,6 +66,8 @@ import org.jetbrains.annotations.Nullable;
 import org.sonarlint.intellij.messages.P3cAnalysisResultListener;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -153,6 +158,7 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
             TripleFunction<LocalInspectionTool, PsiElement, GlobalInspectionContext,RefElement> batchModeDescriptorsUtilConvertFieldValue =
                     (TripleFunction<LocalInspectionTool, PsiElement, GlobalInspectionContext,RefElement>)
                     batchModeDescriptorsUtilConvertField.get(BatchModeDescriptorsUtil.class);
+            InspectionResultsView view = context.getView();
             List<ProblemTreeNodeData> problemTreeNodeDataList = new ArrayList<>();
             for (InspectionResult inspectionResult : resultList) {
                 LocalInspectionToolWrapper toolWrapper = inspectionResult.tool;
@@ -174,17 +180,63 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
                 }
 
                 for (Map.Entry<RefElement, List<ProblemDescriptor>> entry : problems.entrySet()) {
-                    final List<ProblemDescriptor> problemDescriptors = entry.getValue();
+                    List<ProblemDescriptor> problemDescriptors = entry.getValue();
                     RefElement refElement = entry.getKey();
                     CommonProblemDescriptor[] descriptions = problemDescriptors.toArray(CommonProblemDescriptor.EMPTY_ARRAY);
                     for(CommonProblemDescriptor description : descriptions) {
-                        ProblemDescriptionNode problemDescriptionNode = new ProblemDescriptionNode(refElement, description, presentation, null);
-                        System.out.println(problemDescriptionNode);
+                        /*
+                        try {
+
+                            Method getToolProblemsRootNode = view.getTree().getClass().getDeclaredMethod("getToolProblemsRootNode",
+                                    InspectionToolWrapper.class,
+                                    HighlightDisplayLevel.class,
+                                    Boolean.class,
+                                    Boolean.class);
+                            getToolProblemsRootNode.setAccessible(true);
+                            InspectionTreeNode toolNode = (InspectionTreeNode) getToolProblemsRootNode.invoke(view.getTree(), toolWrapper,
+                                    HighlightDisplayLevel.find(presentation.getSeverity((RefElement) refElement)),
+                                    context.getUIOptions().GROUP_BY_SEVERITY, false);
+
+                            ProblemDescriptionNode problemDescriptionNode = new ProblemDescriptionNode(refElement, description, presentation, toolNode);
+
+                        } catch (NoSuchMethodException e) {
+                            e.printStackTrace();
+                        } catch (InvocationTargetException e) {
+                            e.printStackTrace();
+                        }
+ */
+                        HighlightDisplayLevel highlightDisplayLevel = calculatePreciseLevel(refElement, description, presentation);
+                        System.out.println(highlightDisplayLevel);
                     }
                 }
              }
         } catch (NoSuchFieldException | IllegalAccessException e) {
             e.printStackTrace();
+        }
+    }
+
+    private HighlightDisplayLevel calculatePreciseLevel(@Nullable RefEntity element,
+                                                               @Nullable CommonProblemDescriptor descriptor,
+                                                               @NotNull InspectionToolPresentation presentation) {
+        if (element == null) {
+            return null;
+        }
+        final InspectionProfileImpl profile = presentation.getContext().getCurrentProfile();
+        String shortName = presentation.getToolWrapper().getShortName();
+        if (descriptor instanceof ProblemDescriptor) {
+            InspectionProfileManager inspectionProfileManager = profile.getProfileManager();
+            RefElement refElement = (RefElement)element;
+            SeverityRegistrar severityRegistrar = inspectionProfileManager.getSeverityRegistrar();
+            HighlightSeverity severity = presentation.getSeverity(refElement);
+            if (severity == null) {
+                return null;
+            }
+            HighlightInfoType highlightInfoType = ProblemDescriptorUtil.highlightTypeFromDescriptor((ProblemDescriptor)descriptor, severity, severityRegistrar);
+            HighlightSeverity highlightSeverity = highlightInfoType.getSeverity(refElement.getPsiElement());
+            return HighlightDisplayLevel.find(highlightSeverity);
+        }
+        else {
+            return profile.getTools(shortName, presentation.getContext().getProject()).getLevel();
         }
     }
 

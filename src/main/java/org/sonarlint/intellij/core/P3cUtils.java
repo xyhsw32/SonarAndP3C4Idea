@@ -14,6 +14,8 @@ import com.intellij.codeInspection.ex.InspectionManagerEx;
 import com.intellij.codeInspection.ex.InspectionProfileImpl;
 import com.intellij.codeInspection.ex.InspectionToolWrapper;
 import com.intellij.codeInspection.ex.Tools;
+import com.intellij.codeInspection.reference.RefManager;
+import com.intellij.codeInspection.reference.RefManagerImpl;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
@@ -96,6 +98,8 @@ public class P3cUtils {
         AnalysisScope analysisScope= new AnalysisScope(project, new ArrayList<>(virtualFiles));
         InspectionManagerEx inspectionManagerEx = (InspectionManagerEx) InspectionManager.getInstance(project);
         GlobalInspectionContextImpl globalInspectionContext = new PmdGlobalInspectionContextImpl(inspectionManagerEx.getProject(), inspectionManagerEx.getContentManager(),false);
+        RefManager refManager = globalInspectionContext.getRefManager();
+        ((RefManagerImpl)refManager).inspectionReadActionStarted();
         List<InspectionToolWrapper<?, ?>> inspectionToolWrappers = Inspections.INSTANCE.aliInspections(project, inspectionToolWrapper -> inspectionToolWrapper.getTool() instanceof AliBaseInspection);
 //        inspectionToolWrappers = filtSonarActiveRule(project, inspectionToolWrappers);
         analysisScope.setIncludeTestSource(false);
@@ -110,6 +114,24 @@ public class P3cUtils {
         analysisScope.setSearchInLibraries(true);
         SearchScope searchScope = ReadAction.compute(analysisScope::toSearchScope);
         List<Tools> toolsList = globalInspectionContext.getUsedTools();
+//        InspectionResultsView inspectionResultsView = new InspectionResultsView(globalInspectionContext, new InspectionRVContentProviderImpl());
+//        Class clazz=GlobalInspectionContextImpl.class;//获取字节码对象
+//        Field f= null;
+//        try {
+//            f = clazz.getDeclaredField("myView");
+//            f.setAccessible(true);
+//            f.set(globalInspectionContext,inspectionResultsView);
+//        } catch (NoSuchFieldException | IllegalAccessException e) {
+//            e.printStackTrace();
+//        }
+//        ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(project);
+//        ToolWindow toolWindow = toolWindowManager.getToolWindow("SonarLint");
+//        ContentManager contentManager = toolWindow.getContentManager();
+//        Content content = contentManager.getFactory().createContent(inspectionResultsView, "p3c", false);
+//        content.setHelpId(InspectionResultsView.HELP_ID);
+//        content.setDisposer(inspectionResultsView);
+//        contentManager.addContent(content);
+//        contentManager.setSelectedContent(content);
         for (VirtualFile virtualFile : virtualFiles) {
             Runnable runnable = () -> {
                 PsiFile psiFile = PsiManager.getInstance(project).findFile(virtualFile);
@@ -128,6 +150,7 @@ public class P3cUtils {
                 throw new CanceledException();
             }
         }
+        ((RefManagerImpl)refManager).inspectionReadActionFinished();
         project.getMessageBus().syncPublisher(P3cAnalysisResultListener.P3C_ANALYSIS_TOPIC).completed(project);
     }
 

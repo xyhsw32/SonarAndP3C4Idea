@@ -55,6 +55,7 @@ public class ShowAnalysisResultsCallable implements AnalysisCallback {
     Map<VirtualFile, Collection<LiveIssue>> map = affectedFiles.stream()
       .filter(f -> !failedVirtualFiles.contains(f))
       .collect(Collectors.toMap(Function.identity(), issueManager::getForFile));
+    //TODO
     IssueStore issueStore = SonarLintUtils.getService(project, IssueStore.class);
     issueStore.set(map, whatAnalyzed);
     showAnalysisResultsTab();

@@ -22,10 +22,12 @@ import com.intellij.notification.Notifications;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.editor.RangeMarker;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.encoding.EncodingProjectManager;
 import com.intellij.psi.PsiDocumentManager;
@@ -39,6 +41,8 @@ import com.intellij.util.containers.ContainerUtil;
 import ex.ProblemTreeNodeData;
 import icons.SonarLintIcons;
 import org.jetbrains.annotations.NotNull;
+import org.sonar.api.batch.rule.ActiveRule;
+import org.sonar.api.batch.rule.Rule;
 import org.sonarlint.intellij.actions.SonarConfigureProject;
 import org.sonarlint.intellij.analysis.DefaultClientInputFile;
 import org.sonarlint.intellij.analysis.P3cAnalysisUtils;
@@ -47,14 +51,20 @@ import org.sonarlint.intellij.analysis.SonarLintJob;
 import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 import org.sonarlint.intellij.exception.InvalidBindingException;
 import org.sonarlint.intellij.issue.LiveIssue;
+import org.sonarlint.intellij.issue.SonarIssue;
+import org.sonarlint.intellij.issue.SonarResult;
 import org.sonarlint.intellij.messages.P3cAnalysisResultListener;
 import org.sonarlint.intellij.util.SonarLintAppUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
+import org.sonarsource.sonarlint.core.analyzer.issue.DefaultClientIssue;
 import org.sonarsource.sonarlint.core.client.api.exceptions.CanceledException;
+import org.sonarsource.sonarlint.core.container.analysis.filesystem.DefaultTextPointer;
+import org.sonarsource.sonarlint.core.container.analysis.filesystem.DefaultTextRange;
 
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -110,7 +120,9 @@ public class P3cUtils {
         analysisScope.setIncludeTestSource(false);
         analysisScope.setSearchInLibraries(true);
         if (inspectionToolWrappers.isEmpty()){
-            Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","Sonar server does not contain p3c rules","Please check the sonar server configuration", NotificationType.ERROR,null).addAction(new SonarConfigureProject("Sonarqube config")));
+            if (ruleData.isConnection()){
+                Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","Sonar server does not contain p3c rules","Please check the sonar server configuration", NotificationType.ERROR,null).addAction(new SonarConfigureProject("Sonarqube config")));
+            }
             return;
         }
         InspectionProfileImpl profile = InspectionProfileService.INSTANCE.createSimpleProfile(inspectionToolWrappers, inspectionManagerEx, null);
@@ -153,21 +165,17 @@ public class P3cUtils {
         } catch (InvalidBindingException e) {
             e.printStackTrace();
         }
+        SonarLintProjectSettings sonarLintProjectSettings = getSettingsFor(project);
         if (sonarLintFacade instanceof ConnectedSonarLintFacade){
             ConnectedSonarLintFacade connectedSonarLintFacade = (ConnectedSonarLintFacade) sonarLintFacade;
-            SonarLintProjectSettings sonarLintProjectSettings = getSettingsFor(project);
-            RuleData ruleData = connectedSonarLintFacade.getRuleData(sonarLintProjectSettings.getProjectKey());
-            return ruleData;
+            return connectedSonarLintFacade.getRuleData(sonarLintProjectSettings.getProjectKey());
         }else{
+            StandaloneSonarLintFacade standaloneSonarLintFacade = (StandaloneSonarLintFacade) sonarLintFacade;
             Notifications.Bus.notify(new Notification("Sonarlint", SonarLintIcons.ICON_SONARQUBE_16,"Sonarlint","Sonar server is not configured","Please configure the sonar server", NotificationType.ERROR,null).addAction(new SonarConfigureProject("Sonarqube config")));
-            return null;
+            return standaloneSonarLintFacade.getRuleData();
         }
     }
 
-
-    private static boolean process(PsiFile file) {
-        return true;
-    }
 
     private static TextRange getEffectiveRange(SearchScope searchScope, PsiFile file) {
         if (searchScope instanceof LocalSearchScope) {
@@ -210,5 +218,70 @@ public class P3cUtils {
             return encoding;
         }
         return Charset.defaultCharset();
+    }
+
+    public static List<SonarResult> transformLiveIssueMapToSonarResult(Map<VirtualFile, Collection<LiveIssue>> issues){
+        List<SonarResult> sonarResultList = new ArrayList<>();
+        for (Map.Entry<VirtualFile, Collection<LiveIssue>> entry:issues.entrySet()){
+            VirtualFile v = entry.getKey();
+            Collection<LiveIssue> issueList = entry.getValue();
+            SonarResult sonarResult = new SonarResult();
+            sonarResult.setFilePath(v.getPath());
+            List<SonarIssue> sonarIssueList=new ArrayList<>();
+            sonarResult.setSonarIssueList(sonarIssueList);
+            for (LiveIssue liveIssue:issueList){
+                SonarIssue sonarIssue = new SonarIssue();
+                RangeMarker range = liveIssue.getRange();
+                sonarIssue.setType(liveIssue.getType());
+                sonarIssue.setSeverity(liveIssue.getSeverity());
+                sonarIssue.setDescriptionTemplate(liveIssue.getMessage());
+                sonarIssue.setRuleName(liveIssue.getRuleName());
+                sonarIssue.setRuleKey(liveIssue.getRuleKey());
+                sonarIssue.setStartOffset(range.getStartOffset());
+                sonarIssue.setEndOffset(range.getEndOffset());
+                sonarIssueList.add(sonarIssue);
+            }
+            sonarResultList.add(sonarResult);
+        }
+        return sonarResultList;
+    }
+    public static Map<VirtualFile, Collection<LiveIssue>>  transformSonarResultToLiveIssueMap(Project project,List<SonarResult> sonarResultList){
+        Map<VirtualFile, Collection<LiveIssue>> issues=new HashMap<>();
+        DefaultClientInputFile defaultClientInputFile=null;
+        PsiDocumentManager docManager = PsiDocumentManager.getInstance(project);
+        PsiManager psiManager = PsiManager.getInstance(project);
+        RuleData ruleData = getRuleData(project);
+        Map<String, Rule> ruleMap = ruleData.getRuleMap();
+        Map<String, ActiveRule> activeRuleMap = ruleData.getActiveRuleMap();
+        for (SonarResult sonarResult:sonarResultList){
+            String filePath = sonarResult.getFilePath();
+            List<SonarIssue> sonarIssueList = sonarResult.getSonarIssueList();
+            VirtualFile virtualFile = LocalFileSystem.getInstance().findFileByPath(filePath);
+            if (virtualFile!=null){
+                if (defaultClientInputFile==null){
+                    defaultClientInputFile= P3cAnalysisUtils.createClientInputFile(virtualFile, sonarResult.getRelativePath(), getEncoding(virtualFile, project));
+                }
+                PsiFile psiFile = psiManager.findFile(virtualFile);
+                List<LiveIssue> liveIssueList=new ArrayList<>();
+                for (SonarIssue sonarIssue:sonarIssueList){
+                    Document doc = docManager.getDocument(psiFile);
+                    org.sonarsource.sonarlint.core.client.api.common.TextRange sonarTextRange = new org.sonarsource.sonarlint.core.client.api.common.TextRange(0,0,1,1);
+                    DefaultTextRange defaultTextRange = new DefaultTextRange(new DefaultTextPointer(0, 0), new DefaultTextPointer(1, 1));
+                    String ruleKey;
+                    if (sonarIssue.getRuleKey().contains("pmd")){
+                        String[] split = sonarIssue.getRuleKey().split(":");
+                        ruleKey=split[1];
+                    }else{
+                        ruleKey=sonarIssue.getRuleKey();
+                    }
+                    DefaultClientIssue defaultClientIssue = new DefaultClientIssue(sonarIssue.getSeverity(), sonarIssue.getType(), activeRuleMap.get(ruleKey), ruleMap.get(ruleKey), sonarIssue.getDescriptionTemplate(), defaultTextRange, defaultClientInputFile, new ArrayList<>());
+                    RangeMarker rangeMarker = doc.createRangeMarker(sonarIssue.getStartOffset(), sonarIssue.getEndOffset());
+                    LiveIssue liveIssue = new LiveIssue(defaultClientIssue, psiFile, rangeMarker, null);
+                    liveIssueList.add(liveIssue);
+                }
+                issues.put(virtualFile,liveIssueList);
+            }
+        }
+        return issues;
     }
 }

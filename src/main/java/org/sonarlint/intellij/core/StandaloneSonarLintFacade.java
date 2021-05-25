@@ -23,17 +23,14 @@ import com.google.common.base.Preconditions;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Predicate;
+import org.sonar.api.batch.rule.ActiveRule;
+import org.sonar.api.batch.rule.Rule;
+import org.sonarlint.intellij.analysis.RuleData;
 import org.sonarlint.intellij.ui.SonarLintConsole;
 import org.sonarlint.intellij.util.ProjectLogOutput;
 import org.sonarlint.intellij.util.SonarLintUtils;
+import org.sonarsource.sonarlint.core.StandaloneSonarLintEngineImpl;
+import org.sonarsource.sonarlint.core.client.api.common.Language;
 import org.sonarsource.sonarlint.core.client.api.common.PluginDetails;
 import org.sonarsource.sonarlint.core.client.api.common.ProgressMonitor;
 import org.sonarsource.sonarlint.core.client.api.common.RuleKey;
@@ -43,6 +40,18 @@ import org.sonarsource.sonarlint.core.client.api.common.analysis.IssueListener;
 import org.sonarsource.sonarlint.core.client.api.standalone.StandaloneAnalysisConfiguration;
 import org.sonarsource.sonarlint.core.client.api.standalone.StandaloneRuleDetails;
 import org.sonarsource.sonarlint.core.client.api.standalone.StandaloneSonarLintEngine;
+import org.sonarsource.sonarlint.core.container.standalone.rule.StandaloneActiveRuleAdapter;
+import org.sonarsource.sonarlint.core.container.standalone.rule.StandaloneRule;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static org.sonarlint.intellij.config.Settings.getGlobalSettings;
 
@@ -112,5 +121,29 @@ final class StandaloneSonarLintFacade extends SonarLintFacade {
     }
     return details.getHtmlDescription();
   }
-
+  public RuleData getRuleData(){
+    RuleData ruleData = new RuleData();
+    ruleData.setConnection(false);
+    HashMap<String, ActiveRule> activeRuleMap = new HashMap<>();
+    HashMap<String, Rule> ruleMap = new HashMap<>();
+    ruleData.setRuleMap(ruleMap);
+    ruleData.setActiveRuleMap(activeRuleMap);
+    StandaloneSonarLintEngineImpl standaloneSonarLintEngine = (StandaloneSonarLintEngineImpl) this.sonarlint;
+    Collection<StandaloneRuleDetails> allRuleDetails = standaloneSonarLintEngine.getAllRuleDetails();
+    Map<Language, List<StandaloneRuleDetails>> qProfilesByLanguage = allRuleDetails.stream().collect(Collectors.groupingBy(StandaloneRuleDetails::getLanguage));
+    for (Map.Entry<Language, List<StandaloneRuleDetails>> entry : qProfilesByLanguage.entrySet()) {
+      Language language = entry.getKey();
+      List<StandaloneRuleDetails> standaloneRuleDetailsList = entry.getValue();
+      if (language.getLanguageKey().equals("java")){
+        HashMap<String, String> map = new HashMap<>();
+        for (StandaloneRuleDetails standaloneRuleDetails:standaloneRuleDetailsList){
+          StandaloneRule standaloneRule = (StandaloneRule) standaloneRuleDetails;
+          ruleMap.put(standaloneRuleDetails.getKey(), standaloneRule);
+          StandaloneActiveRuleAdapter standaloneActiveRuleAdapter = new StandaloneActiveRuleAdapter(standaloneRule, map);
+          activeRuleMap.put(standaloneRuleDetails.getKey(),standaloneActiveRuleAdapter);
+        }
+      }
+    }
+    return ruleData;
+  }
 }

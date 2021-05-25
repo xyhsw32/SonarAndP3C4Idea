@@ -50,7 +50,6 @@ import org.sonarsource.sonarlint.core.container.storage.StorageRuleAdapter;
 import org.sonarsource.sonarlint.core.proto.Sonarlint;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -127,28 +126,9 @@ class ConnectedSonarLintFacade extends SonarLintFacade {
     }
     return details.getHtmlDescription() + "<br/><br/>" + extendedDescription;
   }
-
-  public List<String> getActiveList(String projectKey){
-    ConnectedSonarLintEngineImpl connectedSonarLintEngine = (ConnectedSonarLintEngineImpl) this.engine;
-    StorageReader storageReader = connectedSonarLintEngine.getGlobalContainer().getComponentByType(StorageReader.class);
-    Map<String, String> qProfilesByLanguage = storageReader.readProjectConfig(projectKey).getQprofilePerLanguageMap();
-    List<String> activeRulesList = new ArrayList<>();
-    for (Map.Entry<String, String> entry : qProfilesByLanguage.entrySet()) {
-      String language = entry.getKey();
-      String qProfileKey = entry.getValue();
-      if (language.equals("java")){
-        Sonarlint.ActiveRules activeRulesFromStorage = storageReader.readActiveRules(qProfileKey);
-        for (Sonarlint.ActiveRules.ActiveRule activeRule : activeRulesFromStorage.getActiveRulesByKeyMap().values()) {
-          if (activeRule.getRepo().equals("pmd")){
-            activeRulesList.add(activeRule.getKey());
-          }
-        }
-      }
-    }
-    return activeRulesList;
-  }
   public RuleData getRuleData(String projectKey){
     RuleData ruleData = new RuleData();
+    ruleData.setConnection(true);
     HashMap<String, ActiveRule> activeRuleMap = new HashMap<>();
     HashMap<String, Rule> ruleMap = new HashMap<>();
     ruleData.setRuleMap(ruleMap);

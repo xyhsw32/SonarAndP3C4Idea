@@ -211,15 +211,29 @@ public class LocalInspectionsCustomPass extends ProgressableTextEditorHighlighti
             SonarLintRule sonarLintRule = (SonarLintRule) ruleMap.get(aliBaseInspection.ruleName());
             ActiveRule activeRule = activeRuleMap.get(aliBaseInspection.ruleName());
             for (ProblemDescriptor descriptor : inspectionResult.foundProblems) {
-                PsiElement element = descriptor.getPsiElement();
-                int lineNumber = descriptor.getLineNumber();
                 TextRange textRange = descriptor.getStartElement().getTextRange();
-                int startOffset = textRange.getStartOffset();
-                int endOffset = textRange.getEndOffset();
-                int startLineNum = document.getLineNumber(startOffset);
-                int endLineNum = document.getLineNumber(endOffset);
-                int lineStartOffset = document.getLineStartOffset(startLineNum);
-                int lineEndOffset = document.getLineStartOffset(endLineNum);
+                int startOffset;
+                int endOffset;
+                int startLineNum;
+                int endLineNum;
+                int lineStartOffset;
+                int lineEndOffset;
+                if (!activeRule.ruleKey().rule().equals("AvoidCommentBehindStatementRule")){
+                     startOffset = textRange.getStartOffset();
+                     endOffset = textRange.getEndOffset();
+                     startLineNum = document.getLineNumber(startOffset);
+                     endLineNum = document.getLineNumber(endOffset);
+                     lineStartOffset = document.getLineStartOffset(startLineNum);
+                     lineEndOffset = document.getLineStartOffset(endLineNum);
+                }else{
+                    int lineNumber = descriptor.getLineNumber();
+                    startLineNum=lineNumber;
+                    endLineNum=lineNumber;
+                    lineStartOffset = document.getLineStartOffset(lineNumber);
+                    startOffset=lineStartOffset;
+                    endOffset = document.getLineEndOffset(lineNumber);
+                    lineEndOffset=startOffset;
+                }
                 org.sonarsource.sonarlint.core.client.api.common.TextRange sonarTextRange = new org.sonarsource.sonarlint.core.client.api.common.TextRange(startLineNum+1,startOffset-lineStartOffset,endLineNum+1,endOffset-lineEndOffset);
                 DefaultTextRange defaultTextRange = new DefaultTextRange(new DefaultTextPointer(startLineNum+1, startOffset-lineStartOffset), new DefaultTextPointer(endLineNum+1, endOffset-lineEndOffset));
                 DefaultClientIssue defaultClientIssue = new DefaultClientIssue(sonarLintRule.severity(), sonarLintRule.type().name(), activeRule, sonarLintRule, descriptor.getDescriptionTemplate(), defaultTextRange, defaultClientInputFile, new ArrayList<>());
